@@ -29,6 +29,16 @@ async function startMatch(interaction) {
   const user1 = interaction.options.getUser("user1", true);
   const user2 = interaction.options.getUser("user2", true);
 
+  for (let i = openMatches.length - 1; i >= 0; i--) {
+    const match = openMatches[i];
+    if (
+      match.captains.includes(user1.id) ||
+      match.captains.includes(user2.id)
+    ) {
+      openMatches.splice(i, 1);
+    }
+  }
+
   openMatches.push({
     channel: interaction.channelId,
     captains: [user1.id, user2.id],
