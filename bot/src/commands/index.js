@@ -1,6 +1,6 @@
-import { blindpick } from "./blindpick.js";
 import { ping } from "./ping.js";
+import { match } from "./match.js";
 export const commands = [
   ping,
-  blindpick
+  match
 ]
