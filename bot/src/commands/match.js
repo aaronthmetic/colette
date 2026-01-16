@@ -1,4 +1,4 @@
-import { CommandInteraction, Client, ApplicationCommandType, ApplicationCommandOptionType, userMention, channelMention, MessageFlags } from "discord.js";
+import { CommandInteraction, Client, ApplicationCommandType, ApplicationCommandOptionType, userMention, channelMention, MessageFlags, EmbedBuilder, Colors } from "discord.js";
 
 export const openMatches = [];
 
@@ -12,11 +12,17 @@ function getOpponentId(match, userId) {
   return match.captains.find(id => id !== userId);
 }
 
-function getBansAgainst(match, captainId) {
-  return Object.values(match.bans.rounds)
-    .flat()
-    .filter(b => b.player && b.by !== captainId)
-    .map(b => b.player);
+function createEmbed({ title, description, fields, color, footer }) {
+  const embed = new EmbedBuilder()
+    .setColor(color ?? Colors.Blurple)
+    .setTimestamp();
+
+  if (title) embed.setTitle(title);
+  if (description) embed.setDescription(description);
+  if (fields) embed.addFields(fields);
+  if (footer) embed.setFooter({ text: footer });
+
+  return embed;
 }
 
 async function startMatch(interaction) {
@@ -27,6 +33,7 @@ async function startMatch(interaction) {
     channel: interaction.channelId,
     captains: [user1.id, user2.id],
     rosters: {},
+    teamNames: {},
     bans: {
       round: 1,
       rounds: {}
@@ -35,9 +42,15 @@ async function startMatch(interaction) {
     phase: "roster"
   });
 
-  await interaction.reply(
-    `Match started between <@${user1.id}> and <@${user2.id}>`
-  );
+  await interaction.reply({
+    embeds: [
+      createEmbed({
+        title: "Match Started",
+        description: `${userMention(user1.id)} vs ${userMention(user2.id)}`,
+        footer: "Phase: Roster Submission"
+      })
+    ]
+  });
 }
 
 async function submitRoster(interaction) {
@@ -49,9 +62,16 @@ async function submitRoster(interaction) {
   if (!match) {
     return interaction.reply({
       flags: MessageFlags.Ephemeral,
-      content: "You are not a captain in an active match."
+      embeds: [
+          createEmbed({
+            description: "You are not a captain in an active match.",
+            color: Colors.Grey
+          })
+        ]
     });
   }
+
+  const teamName = interaction.options.getString("team", true);
 
   const roster = [
     interaction.options.getString("p1"),
@@ -62,10 +82,16 @@ async function submitRoster(interaction) {
   ].filter(Boolean);
 
   match.rosters[interaction.user.id] = roster;
+  match.teamNames[interaction.user.id] = teamName;
 
   await interaction.reply({
     flags: MessageFlags.Ephemeral,
-    content: "Roster submitted."
+    embeds: [
+        createEmbed({
+          description: `Roster submitted for **${teamName}**.`,
+          color: Colors.Grey
+        })
+      ]
   });
 
   if (Object.keys(match.rosters).length === 2) {
@@ -73,11 +99,26 @@ async function submitRoster(interaction) {
     
     const [c1, c2] = match.captains;
 
-    await interaction.channel.send(
-      `**Rosters locked in:**\n\n`
-      + `<@${c1}>:\n${match.rosters[c1].join(", ")}\n\n`
-      + `<@${c2}>:\n${match.rosters[c2].join(", ")}`
-    );
+    await interaction.channel.send({
+      embeds: [
+        createEmbed({
+          title: "Rosters Locked In",
+          fields: [
+            {
+              name: match.teamNames[c1],
+              value: match.rosters[c1].join("\n"),
+              inline: true
+            },
+            {
+              name: match.teamNames[c2],
+              value: match.rosters[c2].join("\n"),
+              inline: true
+            }
+          ],
+          footer: "Phase: Bans"
+        })
+      ]
+    });
   }
 }
 
@@ -125,9 +166,14 @@ async function banPlayer(interaction) {
       content: "You passed your ban."
     });
 
-    await interaction.channel.send(
-      `<@${interaction.user.id}> passed their ban.`
-    );
+    await interaction.channel.send({
+      embeds: [
+        createEmbed({
+          description: `${userMention(interaction.user.id)} (${match.teamNames[interaction.user.id]}) **passed** their ban.`,
+          color: Colors.Grey
+        })
+      ]
+    });
   }
   else {
     const opponentId = getOpponentId(match, interaction.user.id);
@@ -135,26 +181,45 @@ async function banPlayer(interaction) {
 
     if (!opponentRoster.includes(banned)) {
       return interaction.reply({
-        flags: MessageFlags.Ephemeral,
-        content: "You can only ban players from your opponent's roster."
-      });
+      flags: MessageFlags.Ephemeral,
+      embeds: [
+          createEmbed({
+            description: "You can only ban players from your opponent's roster.",
+            color: Colors.Grey
+          })
+        ]
+    });
     }
 
-    const bansAgainstOpponent = getBansAgainst(match, interaction.user.id);
-    const remainingPlayers = opponentRoster.length - bansAgainstOpponent.length;
+    const bannedFromOpponent = Object.values(match.bans.rounds)
+      .flat()
+      .map(b => b.player)
+      .filter(p => p && opponentRoster.includes(p));
+
+    const remainingPlayers = opponentRoster.length - bannedFromOpponent.length;
 
     if (remainingPlayers <= 3) {
       return interaction.reply({
-        flags: MessageFlags.Ephemeral,
-        content: "You cannot ban any more players. Your opponent must keep at least 3."
-      });
+      flags: MessageFlags.Ephemeral,
+      embeds: [
+          createEmbed({
+            description: "You cannot ban any more players. Your opponent must keep at least 3 (or less, if they start with less).",
+            color: Colors.Grey
+          })
+        ]
+    });
     }
 
-    if (bansAgainstOpponent.includes(banned)) {
+    if (bannedFromOpponent.includes(banned)) {
       return interaction.reply({
-        flags: MessageFlags.Ephemeral,
-        content: "That player has already been banned."
-      });
+      flags: MessageFlags.Ephemeral,
+      embeds: [
+          createEmbed({
+            description: "That player has already been banned.",
+            color: Colors.Grey
+          })
+        ]
+    });
     }
 
     roundBans.push({
@@ -164,32 +229,57 @@ async function banPlayer(interaction) {
 
     await interaction.reply({
       flags: MessageFlags.Ephemeral,
-      content: `Ban received: ${banned}`
+      embeds: [
+          createEmbed({
+            description: `Ban received: ${banned}`,
+            color: Colors.Grey
+          })
+        ]
     });
 
-    await interaction.channel.send(
-      `Ban received from <@${interaction.user.id}>`
-    );
+    await interaction.channel.send({
+      embeds: [
+        createEmbed({
+          description: `Ban received from ${userMention(interaction.user.id)} (${match.teamNames[interaction.user.id]})`
+        })
+      ]
+    });
   }
 
   if (roundBans.length === 2) {
-    await interaction.channel.send(
-      `**Ban Round ${round} Results:**\n`
-      + roundBans
-        .map(p => `<@${p.by}>: ${p.player ?? "_passed_"}`)
-        .join("\n")
-    );
+    await interaction.channel.send({
+      embeds: [
+        createEmbed({
+          title: `Ban Round ${round} Results`,
+          fields: roundBans.map(b => ({
+            name: match.teamNames[b.by],
+            value: b.player ?? "*Passed*",
+            inline: true
+          }))
+        })
+      ]
+    });
 
     if (round === 2) {
       match.phase = "blindpick";
-      await interaction.channel.send(
-        `All bans complete.\n\nBlind pick phase has begun.`
-      );
+      await interaction.channel.send({
+        embeds: [
+          createEmbed({
+            title: "Bans Complete",
+            description: "Blind pick phase has begun.",
+            footer: "Phase: Blind Pick"
+          })
+        ]
+      });
     } else {
       match.bans.round++;
-      await interaction.channel.send(
-        `Ban round ${match.bans.round} has begun.`
-      );
+      await interaction.channel.send({
+        embeds: [
+          createEmbed({
+            description: `Ban round ${match.bans.round} has begun.`
+          })
+        ]
+      });
     }
   }
 }
@@ -203,14 +293,24 @@ async function blindPick(interaction) {
   if (!match) {
     return interaction.reply({
       flags: MessageFlags.Ephemeral,
-      content: "No active match."
+      embeds: [
+          createEmbed({
+            description: "No active match.",
+            color: Colors.Grey
+          })
+        ]
     });
   }
 
   if (match.phase !== "blindpick") {
     return interaction.reply({
       flags: MessageFlags.Ephemeral,
-      content: "Blind picks are not available yet."
+      embeds: [
+          createEmbed({
+            description: "Blind picks are not available yet.",
+            color: Colors.Grey
+          })
+        ]
     });
   }
 
@@ -222,21 +322,24 @@ async function blindPick(interaction) {
   if (!myRoster.includes(pick)) {
     return interaction.reply({
       flags: MessageFlags.Ephemeral,
-      content: "You can only blind pick players from your own roster."
+      embeds: [
+          createEmbed({
+            description: "You can only blindpick players from your own roster.",
+            color: Colors.Grey
+          })
+        ]
     });
   }
 
   if (allBanned.includes(pick)) {
     return interaction.reply({
       flags: MessageFlags.Ephemeral,
-      content: "That player is banned."
-    });
-  }
-
-  if (alreadyPicked.includes(pick)) {
-    return interaction.reply({
-      flags: MessageFlags.Ephemeral,
-      content: "That player has already been picked."
+      embeds: [
+          createEmbed({
+            description: "That player is banned.",
+            color: Colors.Grey
+          })
+        ]
     });
   }
 
@@ -245,7 +348,12 @@ async function blindPick(interaction) {
   if (entry && entry.response) {
     return interaction.reply({
       flags: MessageFlags.Ephemeral,
-      content: "You already submitted your blind pick."
+      embeds: [
+          createEmbed({
+            description: "You already submitted your blind pick.",
+            color: Colors.Grey
+          })
+        ]
     });
   }
 
@@ -257,24 +365,41 @@ async function blindPick(interaction) {
   entry.response = pick;
 
   await interaction.reply({
-    flags: MessageFlags.Ephemeral,
-    content: `Blind pick received: ${pick}`
-  });
+      flags: MessageFlags.Ephemeral,
+      embeds: [
+          createEmbed({
+            description: `Blind pick received: ${pick}`,
+            color: Colors.Grey
+          })
+        ]
+    });
 
-  await interaction.channel.send(
-    `Blind pick received from <@${interaction.user.id}>`
-  );
+  await interaction.channel.send({
+    embeds: [
+      createEmbed({
+        description: `Blind pick received from ${userMention(interaction.user.id)} (${match.teamNames[interaction.user.id]}).`
+      })
+    ]
+  });
 
   if (
     match.blindPicks.length === 2 &&
     match.blindPicks.every(p => p.response)
   ) {
-    await interaction.channel.send(
-      `**Blind Pick Results:**\n`
-      + match.blindPicks
-        .map(p => `<@${p.id}>: ${p.response}`)
-        .join("\n")
-    );
+    await interaction.channel.send({
+      embeds: [
+        createEmbed({
+          title: "Blind Pick Results",
+          fields: match.blindPicks.map(p => ({
+            name: match.teamNames[p.id],
+            value: p.response,
+            inline: true
+          })),
+          color: Colors.Green,
+          footer: "Blind Pick Complete"
+        })
+      ]
+    });
 
     openMatches.splice(openMatches.indexOf(match), 1);
   }
@@ -321,6 +446,12 @@ export const match = {
       name: "roster",
       description: "Submit your team roster",
       options: [
+        {
+          name: "team",
+          description: "Team name",
+          type: ApplicationCommandOptionType.String,
+          required: true
+        },
         {
           name: "p1",
           description: "Player 1",
