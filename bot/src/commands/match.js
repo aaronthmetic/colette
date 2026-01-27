@@ -1,4 +1,4 @@
-import { CommandInteraction, Client, ApplicationCommandType, ApplicationCommandOptionType, userMention, channelMention, MessageFlags, EmbedBuilder, Colors } from "discord.js";
+import { CommandInteraction, Client, ApplicationCommandType, ApplicationCommandOptionType, userMention, channelMention, MessageFlags, EmbedBuilder, Colors, PermissionsBitField } from "discord.js";
 
 export const openMatches = [];
 
@@ -23,6 +23,37 @@ function createEmbed({ title, description, fields, color, footer }) {
   if (footer) embed.setFooter({ text: footer });
 
   return embed;
+}
+
+async function canTalk(interaction) {
+  const channel = interaction.channel;
+  if (!channel || !channel.isTextBased()) return false;
+
+  if (channel.isThread()) {
+    if (channel.archived) return false;
+
+    if (!channel.members.me) {
+      try {
+        await channel.join();
+      } catch {
+        return false;
+      }
+    }
+  }
+
+  const me = channel.guild?.members.me;
+  if (!me) return false;
+
+  const perms = channel.permissionsFor(me);
+  if (!perms) return false;
+
+  return perms.has([
+    PermissionsBitField.Flags.ViewChannel,
+    PermissionsBitField.Flags.EmbedLinks,
+    channel.isThread()
+      ? PermissionsBitField.Flags.SendMessagesInThreads
+      : PermissionsBitField.Flags.SendMessages
+  ]);
 }
 
 async function startMatch(interaction) {
@@ -417,6 +448,17 @@ async function blindPick(interaction) {
 
 async function run(client, interaction) {
   if (!interaction.isChatInputCommand()) return;
+
+  if (!(await canTalk(interaction))) {
+    try {
+      return await interaction.reply({
+        flags: MessageFlags.Ephemeral,
+        content: "❌ I don't have permission to send messages or embeds in this channel. Ping me to add me to the thread."
+      });
+    } catch {
+      return;
+    }
+  }
 
   const sub = interaction.options.getSubcommand();
 
