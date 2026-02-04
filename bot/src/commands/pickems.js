@@ -1,6 +1,9 @@
 import { CommandInteraction, Client, ApplicationCommandType, ApplicationCommandOptionType, userMention, channelMention, MessageFlags, EmbedBuilder, Colors, PermissionsBitField } from "discord.js";
 import {readStrings, writeStrings, readLeaderboard, generateLeaderboard} from '../helpers/pickems.js';
 
+const pickemsCutoff = 1771714800;
+const organizerRole = "856957705688055868";
+
 function createEmbed({ title, description, fields, color, footer }) {
   const embed = new EmbedBuilder()
     .setColor(color ?? Colors.Blurple)
@@ -17,13 +20,29 @@ function createEmbed({ title, description, fields, color, footer }) {
 async function run(_client, interaction) {
   const subcommand = interaction.options.getSubcommand();
 
-    const isPublic = (subcommand === "leaderboard");
-
-    await interaction.deferReply({
-      flags: isPublic ? undefined : MessageFlags.Ephemeral
+  // REMOVE THIS LATER AFTER TESTING PHASE DONE
+  if (!interaction.inGuild() || !interaction.member.roles.cache.has(organizerRole)) {
+    return interaction.reply({
+      content: "No permission to use this command.",
+      flags: MessageFlags.Ephemeral
     });
+  }
 
-    if (subcommand === "input") {
+  const isPublic = (subcommand === "leaderboard");
+
+  await interaction.deferReply({
+    flags: isPublic ? undefined : MessageFlags.Ephemeral
+  });
+
+  if (subcommand === "input") {
+    const now = Math.floor(Date.now()/1000);
+
+    if (now > pickemsCutoff) {
+      return interaction.editReply({
+        content: "Pickems submissions are now closed."
+      });
+    }
+
     const inputString = interaction.options.getString("string", true).trim();
     const userId = interaction.user.id;
 
@@ -101,7 +120,7 @@ async function run(_client, interaction) {
     await interaction.editReply({
       embeds: [embed]
     });
-    }
+  }
 }
 
 export const pickems = {
