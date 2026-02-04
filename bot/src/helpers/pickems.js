@@ -156,6 +156,6 @@ const teams2026 = [
     'ucla h'
 ];
 
-const playedArray2026 = [];
+const playedArray2026 = ['a','b','c','d','e','f','g'];
 
 const correctPickems2026 = convert('173db1230d0c201d0d1613230517112300');
