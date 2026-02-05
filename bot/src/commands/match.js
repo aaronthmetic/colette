@@ -1,4 +1,4 @@
-import { CommandInteraction, Client, ApplicationCommandType, ApplicationCommandOptionType, userMention, channelMention, MessageFlags, EmbedBuilder, Colors, PermissionsBitField } from "discord.js";
+import { ApplicationCommandType, ApplicationCommandOptionType, userMention, MessageFlags, EmbedBuilder, Colors, PermissionsBitField } from "discord.js";
 
 export const openMatches = [];
 

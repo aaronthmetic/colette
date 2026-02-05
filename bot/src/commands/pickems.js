@@ -1,4 +1,4 @@
-import { CommandInteraction, Client, ApplicationCommandType, ApplicationCommandOptionType, userMention, channelMention, MessageFlags, EmbedBuilder, Colors, PermissionsBitField } from "discord.js";
+import { ApplicationCommandType, ApplicationCommandOptionType, MessageFlags, EmbedBuilder, Colors } from "discord.js";
 import {readStrings, writeStrings, readLeaderboard, generateLeaderboard} from '../helpers/pickems.js';
 
 const pickemsCutoff = 1771714800;
