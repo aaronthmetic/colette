@@ -1,28 +1,31 @@
 import { ApplicationCommandType, ApplicationCommandOptionType, MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
-import { getStandingsFromCsv, sheetId, lowerGid, upperGid } from '../helpers/standings.js'
+import { getMatchupsFromCsv, sheetId, lowerGid, upperGid } from '../helpers/matchups.js';
 import { getAbbreviationFromTeam, abbrGid } from '../helpers/abbreviations.js';
 
-async function buildStandingsPage({ title, standings, page, perPage }) {
+async function buildMatchupsPage({ title, matches, week, page, perPage }) {
   const start = page * perPage;
-  const slice = standings.slice(start, start + perPage);
-
+  const slice = matches.slice(start, start + perPage);
+  
   const lines = await Promise.all(
     slice.map(async (curr) => {
       try {
-      const abbr = await getAbbreviationFromTeam(curr.participant, sheetId, abbrGid);
+        const [t1abbr, t2abbr] = await Promise.all([
+          getAbbreviationFromTeam(curr.t1.team, sheetId, abbrGid),
+          getAbbreviationFromTeam(curr.t2.team, sheetId, abbrGid)
+        ]);
 
-      return `${curr.rank.toString().padStart(2)}. ${abbr} - (${curr.score}-${curr.gamesplayed - curr.score} Record, ${curr.buchholz} Buchholz, Δ${curr.pointsdifference})`;
+        return curr.played ? `(${curr.t1.seed}) ${t1abbr} (${curr.t1.wl} ${curr.t1.score} - ${curr.t2.score} ${curr.t2.wl}) ${t2abbr} (${curr.t2.seed})` : `(${curr.t1.seed}) ${t1abbr} VS ${t2abbr} (${curr.t2.seed})`;
       }
       catch {
-        return `${curr.rank.toString().padStart(2)}. ${curr.participant} - (${curr.score}-${curr.gamesplayed - curr.score} Record, ${curr.buchholz} Buchholz, Δ${curr.pointsdifference})`;
+        return curr.played ? `(${curr.t1.seed}) ${curr.t1.team} (${curr.t1.wl} ${curr.t1.score} - ${curr.t2.score} ${curr.t2.wl}) ${curr.t2.team} (${curr.t2.seed})` : `(${curr.t1.seed}) ${curr.t1.team} VS ${curr.t2.team} (${curr.t2.seed})`;
       }
     })
   );
 
   const content =
     '\`\`\`' +
-    `${title}\n` +
-    lines.join('\n') +
+    `${title} FOR WEEK ${week}\n\n` +
+    lines.join("\n\n") +
     '\`\`\`';
 
   return content;
@@ -44,29 +47,35 @@ function buildButtons(page, maxPage) {
   );
 }
 
-async function handleStandings(interaction, title, gid) {
+async function handleMatchups(interaction, title, gid) {
   const perPage = 0 < (interaction.options.getInteger("entries") ?? -1) && 17 > (interaction.options.getInteger("entries") ?? -1) ? interaction.options.getInteger("entries") : 10;
 
-  let standings;
+  let matchups;
   try {
-    standings = await getStandingsFromCsv(sheetId, gid);
+    matchups = await getMatchupsFromCsv(sheetId, gid);
   } catch (err) {
     return interaction.editReply({
-      content: "Failed to load standings. Please try again later."
+      content: "Failed to load matchups. Please try again later."
     });
   }
 
-  if (!standings.length) {
-    return interaction.editReply({
-      content: "No standings available."
-    });
+  if (!matchups.round || !Array.isArray(matchups[matchups.round])) {
+    return interaction.editReply({ content: "No matchups available." });
+  }
+
+  const week = Object.keys(matchups).includes((interaction.options.getInteger("week") ?? matchups.round).toString()) ? interaction.options.getInteger("week") ?? matchups.round : matchups.round;
+
+  const matches = matchups[week];
+
+  if (!matches?.length) {
+    return interaction.editReply({ content: "No matchups for this week." });
   }
 
   let page = 0;
-  const maxPage = Math.max(0, Math.floor((standings.length - 1) / perPage));
+  const maxPage = Math.max(0, Math.floor((matches.length - 1) / perPage));
 
   const message = await interaction.editReply({
-    content: await buildStandingsPage({ title, standings, page, perPage }),
+    content: await buildMatchupsPage({ title, matches, week, page, perPage }),
     components: [buildButtons(page, maxPage)]
   });
 
@@ -87,7 +96,7 @@ async function handleStandings(interaction, title, gid) {
     page = Math.max(0, Math.min(page, maxPage));
 
     await btn.update({
-      content: await buildStandingsPage({ title, standings, page, perPage }),
+      content: await buildMatchupsPage({ title, matches, week, page, perPage }),
       components: [buildButtons(page, maxPage)]
     });
   });
@@ -108,17 +117,17 @@ async function run(_client, interaction) {
   await interaction.deferReply();
 
   if (subcommand === "lower") {
-    await handleStandings(interaction, "LOWER STANDINGS", lowerGid);
+    await handleMatchups(interaction, "LOWER MATCHUPS", lowerGid);
   }
 
   if (subcommand === "upper") {
-    await handleStandings(interaction, "UPPER STANDINGS", upperGid);
+    await handleMatchups(interaction, "UPPER MATCHUPS", upperGid);
   }
 };
 
-export const standings = {
-  name: "standings",
-  description: "show standings",
+export const matchups = {
+  name: "matchups",
+  description: "show matchups",
   run,
   type: ApplicationCommandType.ChatInput,
   options: [
@@ -127,6 +136,12 @@ export const standings = {
       name: "upper",
       description: "upper division",
       options: [
+        {
+          name: "week",
+          description: "week to show matchups for (default latest week)",
+          type: ApplicationCommandOptionType.Integer,
+          required: false
+        },
         {
           name: "entries",
           description: "number of teams to show per page (default 10, max 16)",
@@ -140,6 +155,12 @@ export const standings = {
       name: "lower",
       description: "lower division",
       options: [
+        {
+          name: "week",
+          description: "week to show matchups for (default latest week)",
+          type: ApplicationCommandOptionType.Integer,
+          required: false
+        },
         {
           name: "entries",
           description: "number of teams to show per page (default 10, max 16)",
