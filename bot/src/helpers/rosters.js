@@ -26,7 +26,7 @@ export async function getRostersFromCsv(sheetId, gid) {
   }
 
   return new Promise((resolve, reject) => {
-      parse(csvData, { trim: true, skip_empty_lines: true }, (err, parsedData) => {
+      parse(csvData, { trim: true, skip_empty_lines: true, from_line: 2 }, (err, parsedData) => {
         if (err) {
           return reject(new Error(`csv parse error: ${err.message}`));
         }
@@ -55,6 +55,3 @@ export async function getRostersFromCsv(sheetId, gid) {
 // CHANGE THESE PER YEAR
 export const sheetId = '1JQePUvzoWLdC3u_CRSMEJ9bCll5qPkez0ysqL8U7YWE';
 export const rosterGid = 111307365;
-
-const rosters = await getRostersFromCsv(sheetId,rosterGid);
-console.log(rosters);
