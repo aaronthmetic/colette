@@ -1,6 +1,7 @@
-import { ApplicationCommandType, ApplicationCommandOptionType, EmbedBuilder, Colors } from "discord.js";
+import { ApplicationCommandType, ApplicationCommandOptionType, EmbedBuilder, Colors, escapeMarkdown } from "discord.js";
 import { getRostersFromCsv, sheetId, rosterGid } from '../helpers/rosters.js'
 import { getAbbreviationFromTeam, getAbbreviationsFromCsv, abbrGid } from '../helpers/abbreviations.js';
+import { getUserData } from "../helpers/tlStats.js";
 
 function createEmbed({ title, description, fields, color, footer }) {
   const embed = new EmbedBuilder()
@@ -20,7 +21,7 @@ async function showRoster(interaction, teamName) {
     const rosters = await getRostersFromCsv(sheetId, rosterGid);
 
     const team = rosters.find(
-      obj => obj.team.toLowerCase() === teamName.toLowerCase()
+      obj => obj.team?.toLowerCase() === teamName?.toLowerCase()
     );
 
     if (!team) {
@@ -34,17 +35,60 @@ async function showRoster(interaction, teamName) {
       });
     }
 
+    const abbr = await getAbbreviationFromTeam(team.team, sheetId, abbrGid) ?? team.team;
+
+    const starters = Array.isArray(team.players) ? team.players : [];
+    const subs = Array.isArray(team.subs) ? team.subs : [];
+
+    async function fetchWithStats(username) {
+      const clean = username.toLowerCase().trim();
+      const data = await getUserData(clean);
+
+      return {
+        username,
+        glicko: data?.glicko ?? -1,
+        rank: data?.rank ?? null
+      };
+    }
+
+    const starterData = await Promise.all(
+      starters.map(player => fetchWithStats(player))
+    );
+
+    const subData = await Promise.all(
+      subs.map(player => fetchWithStats(player))
+    );
+
+    starterData.sort((a, b) => b.glicko - a.glicko);
+    subData.sort((a, b) => b.glicko - a.glicko);
+
+    const formattedStarters = starterData.map(player => {
+      const safeUsername = escapeMarkdown(player.username);
+
+      return player.rank
+        ? `${safeUsername} — ${player.rank.toUpperCase()} (${Math.round(player.glicko)})`
+        : `${safeUsername} — N/A`
+    });
+
+    const formattedSubs = subData.map(player => {
+      const safeUsername = escapeMarkdown(player.username);
+
+      return player.rank
+        ? `${safeUsername} — ${player.rank.toUpperCase()} (${Math.round(player.glicko)})`
+        : `${safeUsername} — N/A`
+    });
+
     const embed = createEmbed({
-      title: `${team.team} (Seed ${team.seed}, Abbreviation: ${await getAbbreviationFromTeam(team.team, sheetId, abbrGid)})`,
+      title: `${team.team} (Seed ${team.seed}, Abbreviation: ${abbr})`,
       fields: [
         {
           name: "Starters",
-          value: team.players.join("\n") || "None",
+          value: formattedStarters.length ? formattedStarters.join("\n"): "None",
           inline: true
         },
         {
           name: "Subs",
-          value: team.subs.join("\n") || "None",
+          value: formattedSubs.length ? formattedSubs.join("\n") : "None",
           inline: true
         }
       ]
@@ -61,6 +105,10 @@ async function showRoster(interaction, teamName) {
 }
 
 async function run(_client, interaction) {
+  if (!interaction.isAutocomplete()) {
+    await interaction.deferReply();
+  }
+
   if (interaction.isAutocomplete()) {
     const focused = interaction.options.getFocused();
 
@@ -94,7 +142,6 @@ async function run(_client, interaction) {
   }
 
   const teamName = interaction.options.getString("team");
-  await interaction.deferReply();
 
   await showRoster(interaction, teamName);
 };
