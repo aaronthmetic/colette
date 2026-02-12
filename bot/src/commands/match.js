@@ -447,6 +447,54 @@ async function blindPick(interaction) {
 }
 
 async function run(client, interaction) {
+  if (interaction.isAutocomplete()) {
+    const sub = interaction.options.getSubcommand();
+
+    const match = openMatches.find(m =>
+      m.channel === interaction.channelId &&
+      m.captains.includes(interaction.user.id)
+    );
+
+    if (!match) return interaction.respond([]);
+
+    // ---- BAN AUTOCOMPLETE ----
+    if (sub === "ban") {
+      if (match.phase !== "ban") {
+        return interaction.respond([]);
+      }
+
+      const opponentId = getOpponentId(match, interaction.user.id);
+      const opponentRoster = match.rosters[opponentId] ?? [];
+      const bannedPlayers = getAllBannedPlayers(match);
+
+      const available = opponentRoster
+        .filter(p => !bannedPlayers.includes(p))
+        .map(p => ({ name: p, value: p }));
+
+      return interaction.respond(available.slice(0, 25));
+    }
+
+    // ---- BLINDPICK AUTOCOMPLETE ----
+    if (sub === "blindpick") {
+      if (match.phase !== "blindpick") {
+        return interaction.respond([]);
+      }
+
+      const myRoster = match.rosters[interaction.user.id] ?? [];
+      const bannedPlayers = getAllBannedPlayers(match);
+      const alreadyPicked = match.blindPicks.map(p => p.response);
+
+      const available = myRoster
+        .filter(p => !bannedPlayers.includes(p))
+        .filter(p => !alreadyPicked.includes(p))
+        .map(p => ({ name: p, value: p }));
+
+      return interaction.respond(available.slice(0, 25));
+    }
+
+    return interaction.respond([]);
+  }
+
   if (!interaction.isChatInputCommand()) return;
 
   if (!(await canTalk(interaction))) {

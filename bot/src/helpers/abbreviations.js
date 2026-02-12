@@ -1,7 +1,7 @@
 import { parse } from 'csv-parse';
 import { getCsvFromSheets } from './googleSheets.js';
 
-async function getAbbreviationsFromCsv(sheetId, gid) {
+export async function getAbbreviationsFromCsv(sheetId, gid) {
   let csvData;
 
   try {
