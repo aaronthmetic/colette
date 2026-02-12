@@ -13,7 +13,7 @@ export async function getStandingsFromCsv(sheetId, gid) {
   }
 
   return new Promise((resolve, reject) => {
-    parse(csvData, {}, (err, parsedData) => {
+    parse(csvData, { trim: true, skip_empty_lines: true }, (err, parsedData) => {
       if (err) {
         return reject(new Error(`csv parse error: ${err.message}`));
       }
