@@ -132,10 +132,14 @@ async function run(_client, interaction) {
         )
         .slice(0, 25);
 
-      await interaction.respond(filtered);
+      if (!interaction.responded) {
+        await interaction.respond(filtered).catch(() => {});
+      }
     } catch (err) {
       console.error(err);
-      await interaction.respond([]);
+      if (!interaction.responded) {
+        await interaction.respond([]).catch(() => {});
+      }
     }
 
     return;

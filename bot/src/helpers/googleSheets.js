@@ -4,7 +4,7 @@ export async function getCsvFromSheets(sheetId, gid) {
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
+  const timeout = setTimeout(() => controller.abort(), 30000);
 
   try {
     const url = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;

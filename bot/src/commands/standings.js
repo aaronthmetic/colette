@@ -1,21 +1,15 @@
 import { ApplicationCommandType, ApplicationCommandOptionType, MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 import { getStandingsFromCsv, sheetId, lowerGid, upperGid } from '../helpers/standings.js'
-import { getAbbreviationFromTeam, abbrGid } from '../helpers/abbreviations.js';
+import { getAbbreviationsFromCsv, abbrGid } from '../helpers/abbreviations.js';
 
-async function buildStandingsPage({ title, standings, page, perPage }) {
+async function buildStandingsPage({ title, standings, page, perPage, abbrMap }) {
   const start = page * perPage;
   const slice = standings.slice(start, start + perPage);
 
   const lines = await Promise.all(
     slice.map(async (curr) => {
-      try {
-      const abbr = await getAbbreviationFromTeam(curr.participant, sheetId, abbrGid);
-
+      const abbr = abbrMap.get(curr.participant) ?? curr.participant;
       return `${curr.rank.toString().padStart(2)}. ${abbr} - (${curr.score}-${curr.gamesplayed - curr.score} Record, ${curr.buchholz} Buchholz, Δ${curr.pointsdifference})`;
-      }
-      catch {
-        return `${curr.rank.toString().padStart(2)}. ${curr.participant} - (${curr.score}-${curr.gamesplayed - curr.score} Record, ${curr.buchholz} Buchholz, Δ${curr.pointsdifference})`;
-      }
     })
   );
 
@@ -65,8 +59,13 @@ async function handleStandings(interaction, title, gid) {
   let page = 0;
   const maxPage = Math.max(0, Math.floor((standings.length - 1) / perPage));
 
+  const abbreviations = await getAbbreviationsFromCsv(sheetId, abbrGid);
+  const abbrMap = new Map(
+    abbreviations.map(a => [a.name, a.abbr])
+  );
+
   const message = await interaction.editReply({
-    content: await buildStandingsPage({ title, standings, page, perPage }),
+    content: await buildStandingsPage({ title, standings, page, perPage, abbrMap }),
     components: [buildButtons(page, maxPage)]
   });
 

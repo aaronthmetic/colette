@@ -1,7 +1,31 @@
 import { parse } from 'csv-parse';
 import { getCsvFromSheets } from './googleSheets.js';
+import fs from 'fs/promises';
+import path from 'path';
+
+const DATA_DIR = path.resolve('../data/rosters');
+const ROSTERS_PATH = path.join(DATA_DIR, 'rosters.json');
+
+const CACHE_DURATION = 300000;
+
+// CHANGE THESE PER YEAR
+export const sheetId = '1JQePUvzoWLdC3u_CRSMEJ9bCll5qPkez0ysqL8U7YWE';
+export const rosterGid = 111307365;
 
 export async function getRostersFromCsv(sheetId, gid) {
+  try {
+    const stats = await fs.stat(ROSTERS_PATH);
+    const age = Date.now() - stats.mtimeMs;
+
+    if (age < CACHE_DURATION) {
+      const cached = await fs.readFile(ROSTERS_PATH, "utf-8");
+      return JSON.parse(cached);
+    }
+  } catch (err) {
+    if (err.code !== 'ENOENT') {
+      console.error("Roster cache read error:", err);
+    }
+  }
 
   // change these depending on where information is (zero-indexed)
   const seed = 0;
@@ -25,33 +49,33 @@ export async function getRostersFromCsv(sheetId, gid) {
     throw new Error(`failed to fetch: ${err.message}`);
   }
 
-  return new Promise((resolve, reject) => {
-      parse(csvData, { trim: true, skip_empty_lines: true, from_line: 2 }, (err, parsedData) => {
-        if (err) {
-          return reject(new Error(`csv parse error: ${err.message}`));
-        }
+  const parsedData = await new Promise((resolve, reject) => {
+    parse(csvData, { trim: true, skip_empty_lines: true, from_line: 2 }, (err, data) => {
+      if (err) {
+        return reject(new Error(`csv parse error: ${err.message}`));
+      }
+      resolve(data);
+    });
+  });
+      
+  if (!Array.isArray(parsedData) || parsedData.length === 0) {
+    return [];
+  }
 
-        if (!Array.isArray(parsedData) || parsedData.length === 0) {
-          return resolve([]);
-        }
+  const rosters = parsedData.reduce((arr, row) => {
+    arr.push(
+      {
+        seed: row[seed],
+        team: row[team],
+        players: [row[p1], row[p2], row[p3], row[p4], row[p5]].filter(Boolean),
+        subs: [row[s1], row[s2], row[s3], row[s4], row[s5]].filter(Boolean)
+      }
+    )
+    return arr;
+  }, [])
 
-        const rosters = parsedData.reduce((arr, row) => {
-          arr.push(
-            {
-              seed: row[seed],
-              team: row[team],
-              players: [row[p1], row[p2], row[p3], row[p4], row[p5]].filter(Boolean),
-              subs: [row[s1], row[s2], row[s3], row[s4], row[s5]].filter(Boolean)
-            }
-          )
-          return arr;
-        }, [])
+  await fs.mkdir(DATA_DIR, { recursive: true });
+  await fs.writeFile(ROSTERS_PATH, JSON.stringify(rosters, null, 2));
 
-        resolve(rosters);
-      });
-    })
+  return rosters;
 }
-
-// CHANGE THESE PER YEAR
-export const sheetId = '1JQePUvzoWLdC3u_CRSMEJ9bCll5qPkez0ysqL8U7YWE';
-export const rosterGid = 111307365;

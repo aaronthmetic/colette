@@ -1,24 +1,17 @@
 import { ApplicationCommandType, ApplicationCommandOptionType, MessageFlags, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 import { getMatchupsFromCsv, sheetId, lowerGid, upperGid } from '../helpers/matchups.js';
-import { getAbbreviationFromTeam, abbrGid } from '../helpers/abbreviations.js';
+import { getAbbreviationsFromCsv, abbrGid } from '../helpers/abbreviations.js';
 
-async function buildMatchupsPage({ title, matches, week, page, perPage }) {
+async function buildMatchupsPage({ title, matches, week, page, perPage, abbrMap }) {
   const start = page * perPage;
   const slice = matches.slice(start, start + perPage);
   
   const lines = await Promise.all(
-    slice.map(async (curr) => {
-      try {
-        const [t1abbr, t2abbr] = await Promise.all([
-          getAbbreviationFromTeam(curr.t1.team, sheetId, abbrGid),
-          getAbbreviationFromTeam(curr.t2.team, sheetId, abbrGid)
-        ]);
+    slice.map((curr) => {
+      const t1abbr = abbrMap.get(curr.t1.team) ?? curr.t1.team;
+      const t2abbr = abbrMap.get(curr.t2.team) ?? curr.t2.team;
 
-        return curr.played ? `(${curr.t1.seed}) ${t1abbr} (${curr.t1.wl} ${curr.t1.score} - ${curr.t2.score} ${curr.t2.wl}) ${t2abbr} (${curr.t2.seed})` : `(${curr.t1.seed}) ${t1abbr} VS ${t2abbr} (${curr.t2.seed})`;
-      }
-      catch {
-        return curr.played ? `(${curr.t1.seed}) ${curr.t1.team} (${curr.t1.wl} ${curr.t1.score} - ${curr.t2.score} ${curr.t2.wl}) ${curr.t2.team} (${curr.t2.seed})` : `(${curr.t1.seed}) ${curr.t1.team} VS ${curr.t2.team} (${curr.t2.seed})`;
-      }
+      return curr.played ? `(${curr.t1.seed}) ${t1abbr} (${curr.t1.wl} ${curr.t1.score} - ${curr.t2.score} ${curr.t2.wl}) ${t2abbr} (${curr.t2.seed})` : `(${curr.t1.seed}) ${t1abbr} VS ${t2abbr} (${curr.t2.seed})`;
     })
   );
 
@@ -74,8 +67,13 @@ async function handleMatchups(interaction, title, gid) {
   let page = 0;
   const maxPage = Math.max(0, Math.floor((matches.length - 1) / perPage));
 
+  const abbreviations = await getAbbreviationsFromCsv(sheetId, abbrGid);
+  const abbrMap = new Map(
+    abbreviations.map(a => [a.name, a.abbr])
+  );
+
   const message = await interaction.editReply({
-    content: await buildMatchupsPage({ title, matches, week, page, perPage }),
+    content: await buildMatchupsPage({ title, matches, week, page, perPage, abbrMap }),
     components: [buildButtons(page, maxPage)]
   });
 

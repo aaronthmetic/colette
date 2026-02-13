@@ -2,7 +2,10 @@ import "dotenv/config.js";
 import discord from "discord.js";
 const { Client, GatewayIntentBits, Interaction, MessageFlags } = discord;
 import { commands } from "./commands/index.js";
-import { openMatches } from "./commands/match.js";
+import { getRostersFromCsv, sheetId, rosterGid } from "./helpers/rosters.js";
+import { getAbbreviationsFromCsv, abbrGid } from "./helpers/abbreviations.js";
+import { getMatchupsFromCsv, upperGid as upperMGid, lowerGid as lowerMGid } from "./helpers/matchups.js";
+import { getStandingsFromCsv, upperGid as upperSGid, lowerGid as lowerSGid } from "./helpers/standings.js";
 
 const token = process.env.TOKEN;
 
@@ -20,6 +23,22 @@ client.on("clientReady", async () => {
   await client.application.commands.set(commands);
 
   console.log(`${client.user.username} is online`);
+
+  // warm cache
+  try {
+    await Promise.all([
+      getRostersFromCsv(sheetId, rosterGid),
+      getAbbreviationsFromCsv(sheetId, abbrGid),
+      getMatchupsFromCsv(sheetId, lowerMGid),
+      getMatchupsFromCsv(sheetId, upperMGid),
+      getStandingsFromCsv(sheetId, lowerSGid),
+      getStandingsFromCsv(sheetId, upperSGid)
+    ]);
+
+    console.log("Cache warmed");
+  } catch (err) {
+    console.error("Cache warm failed:", err);
+  }
 });
 
 // Respond to commands
