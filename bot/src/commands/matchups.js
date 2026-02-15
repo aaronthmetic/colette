@@ -94,7 +94,7 @@ async function handleMatchups(interaction, title, gid) {
     page = Math.max(0, Math.min(page, maxPage));
 
     await btn.update({
-      content: await buildMatchupsPage({ title, matches, week, page, perPage }),
+      content: await buildMatchupsPage({ title, matches, week, page, perPage, abbrMap }),
       components: [buildButtons(page, maxPage)]
     });
   });

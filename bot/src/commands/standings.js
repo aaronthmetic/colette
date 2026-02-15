@@ -86,7 +86,7 @@ async function handleStandings(interaction, title, gid) {
     page = Math.max(0, Math.min(page, maxPage));
 
     await btn.update({
-      content: await buildStandingsPage({ title, standings, page, perPage }),
+      content: await buildStandingsPage({ title, standings, page, perPage, abbrMap }),
       components: [buildButtons(page, maxPage)]
     });
   });
