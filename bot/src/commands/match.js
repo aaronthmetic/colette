@@ -627,7 +627,8 @@ async function run(client, interaction) {
             description: pending.roster.join("\n"),
             color: Colors.Grey
           })
-        ]
+        ],
+        components: []
       });
 
       await interaction.channel.send({
