@@ -1,4 +1,4 @@
-import { ApplicationCommandType, ApplicationCommandOptionType, userMention, MessageFlags, EmbedBuilder, Colors, PermissionsBitField } from "discord.js";
+import { ApplicationCommandType, ApplicationCommandOptionType, userMention, MessageFlags, EmbedBuilder, Colors, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 
 export const openMatches = [];
 
@@ -74,6 +74,7 @@ async function startMatch(interaction) {
     channel: interaction.channelId,
     captains: [user1.id, user2.id],
     rosters: {},
+    pendingRosters: {},
     teamNames: {},
     bans: {
       round: 1,
@@ -112,6 +113,30 @@ async function submitRoster(interaction) {
     });
   }
 
+  if (match.phase !== "roster") {
+    return interaction.reply({
+      flags: MessageFlags.Ephemeral,
+      embeds: [
+        createEmbed({
+          description: "Roster submission phase is over.",
+          color: Colors.Grey
+        })
+      ]
+    });
+  }
+
+  if (match.rosters[interaction.user.id]) {
+    return interaction.reply({
+      flags: MessageFlags.Ephemeral,
+      embeds: [
+        createEmbed({
+          description: "You have already submitted your roster and cannot edit it.",
+          color: Colors.Grey
+        })
+      ]
+    });
+  }
+
   const teamName = interaction.options.getString("team", true);
 
   const roster = [
@@ -122,45 +147,106 @@ async function submitRoster(interaction) {
     interaction.options.getString("p5")
   ].filter(Boolean);
 
-  match.rosters[interaction.user.id] = roster;
-  match.teamNames[interaction.user.id] = teamName;
-
-  await interaction.reply({
-    flags: MessageFlags.Ephemeral,
-    embeds: [
-        createEmbed({
-          description: `Roster submitted for **${teamName}**.`,
-          color: Colors.Grey
-        })
-      ]
-  });
-
-  if (Object.keys(match.rosters).length === 2) {
-    match.phase = "ban";
-    
-    const [c1, c2] = match.captains;
-
-    await interaction.channel.send({
+  if (roster.length < 1) {
+    return interaction.reply({
+      flags: MessageFlags.Ephemeral,
       embeds: [
         createEmbed({
-          title: "Rosters Locked In",
-          fields: [
-            {
-              name: match.teamNames[c1],
-              value: match.rosters[c1].join("\n"),
-              inline: true
-            },
-            {
-              name: match.teamNames[c2],
-              value: match.rosters[c2].join("\n"),
-              inline: true
-            }
-          ],
-          footer: "Phase: Bans"
+          description: "You must submit at least one player.",
+          color: Colors.Grey
         })
       ]
     });
   }
+
+  if (new Set(roster).size !== roster.length) {
+    return interaction.reply({
+      flags: MessageFlags.Ephemeral,
+      embeds: [
+        createEmbed({
+          description: "Duplicate player names are not allowed.",
+          color: Colors.Grey
+        })
+      ]
+    });
+  }
+
+  const opponentId = getOpponentId(match, interaction.user.id);
+  const opponentRoster = match.rosters[opponentId] ?? [];
+
+  const overlappingPlayers = roster.filter(p =>
+    opponentRoster.includes(p)
+  );
+
+  if (overlappingPlayers.length > 0) {
+    return interaction.reply({
+      flags: MessageFlags.Ephemeral,
+      embeds: [
+        createEmbed({
+          description: `These players are already on the opposing roster:\n${overlappingPlayers.join("\n")}`,
+          color: Colors.Grey
+        })
+      ]
+    });
+  }
+
+  match.pendingRosters[interaction.user.id] = { roster, teamName };
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`confirm_roster_${interaction.user.id}`)
+      .setLabel("Confirm")
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`cancel_roster_${interaction.user.id}`)
+      .setLabel("Cancel")
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  await interaction.reply({
+    flags: MessageFlags.Ephemeral,
+    embeds: [
+      createEmbed({
+        title: `Confirm Roster — ${teamName}`,
+        description: roster.join("\n"),
+        color: Colors.Grey,
+        footer: "You have 60 seconds to confirm."
+      })
+    ],
+    components: [row]
+  });
+
+  const reply = await interaction.fetchReply();
+
+  const collector = reply.createMessageComponentCollector({
+    time: 60_000
+  });
+
+  collector.on("end", async (_, reason) => {
+    const stillPending = match.pendingRosters[interaction.user.id];
+
+    if (!stillPending) return;
+
+    delete match.pendingRosters[interaction.user.id];
+
+    const disabledRow = new ActionRowBuilder().addComponents(
+      row.components.map(btn => ButtonBuilder.from(btn).setDisabled(true))
+    );
+
+    try {
+      await interaction.editReply({
+        embeds: [
+          createEmbed({
+            description: "Roster confirmation timed out. Submission canceled.",
+            color: Colors.Red
+          })
+        ],
+        components: [disabledRow]
+      });
+    } catch {
+      
+    }
+  });
 }
 
 async function banPlayer(interaction) {
@@ -493,6 +579,108 @@ async function run(client, interaction) {
     }
 
     return interaction.respond([]);
+  }
+
+  if (interaction.isButton()) {
+    const parts = interaction.customId.split("_");
+    const action = parts[0];
+    const userId = parts[2];
+
+    const match = openMatches.find(m =>
+      m.channel === interaction.channelId &&
+      m.captains.includes(userId)
+    );
+
+    if (!match) {
+      return interaction.reply({
+        flags: MessageFlags.Ephemeral,
+        content: "No active match."
+      });
+    }
+
+    if (interaction.user.id !== userId) {
+      return interaction.reply({
+        flags: MessageFlags.Ephemeral,
+        content: "This button is not for you."
+      });
+    }
+
+    const pending = match.pendingRosters[userId];
+    if (!pending) {
+      return interaction.reply({
+        flags: MessageFlags.Ephemeral,
+        content: "No pending roster found."
+      });
+    }
+
+    await interaction.deferUpdate();
+
+    if (action === "confirm") {
+      match.rosters[userId] = pending.roster;
+      match.teamNames[userId] = pending.teamName;
+      delete match.pendingRosters[userId];
+
+      await interaction.editReply({
+        embeds: [
+          createEmbed({
+            title: `Roster submitted for ${pending.teamName}`,
+            description: pending.roster.join("\n"),
+            color: Colors.Grey
+          })
+        ]
+      });
+
+      await interaction.channel.send({
+        embeds: [
+          createEmbed({
+            description: `Roster submitted for **${pending.teamName}**.`
+          })
+        ]
+      });
+
+      if (Object.keys(match.rosters).length === 2) {
+        match.phase = "ban";
+
+        const [c1, c2] = match.captains;
+
+        await interaction.channel.send({
+          embeds: [
+            createEmbed({
+              title: "Rosters Locked In",
+              fields: [
+                {
+                  name: match.teamNames[c1],
+                  value: match.rosters[c1].join("\n"),
+                  inline: true
+                },
+                {
+                  name: match.teamNames[c2],
+                  value: match.rosters[c2].join("\n"),
+                  inline: true
+                }
+              ],
+              footer: "Phase: Bans"
+            })
+          ]
+        });
+      }
+    }
+
+    if (action === "cancel") {
+      delete match.pendingRosters[userId];
+
+      await interaction.editReply({
+        embeds: [
+          createEmbed({
+            description: "Roster submission canceled.",
+            color: Colors.Grey
+          })
+        ],
+        components: []
+      });
+    }
+
+    return;
   }
 
   if (!interaction.isChatInputCommand()) return;

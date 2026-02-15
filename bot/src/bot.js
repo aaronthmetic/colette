@@ -43,12 +43,25 @@ client.on("clientReady", async () => {
 
 // Respond to commands
 client.on("interactionCreate", async (interaction) => {
-  if (interaction.isButton() || interaction.isAutocomplete()) {
+  if (interaction.isAutocomplete()) {
     const slashCommand = commands.find(c => c.name === interaction.commandName);
     if (!slashCommand) return;
 
     await slashCommand.run(client, interaction);
     return;
+  }
+
+  if (interaction.isButton()) {
+    if (
+      interaction.customId.startsWith("confirm_roster_") ||
+      interaction.customId.startsWith("cancel_roster_")
+    ) {
+      const command = commands.find(c => c.name === "match");
+      if (!command) return;
+
+      await command.run(client, interaction);
+      return;
+    }
   }
 
   if (interaction.isChatInputCommand()) {
