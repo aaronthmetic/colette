@@ -43,7 +43,7 @@ client.on("clientReady", async () => {
 
 // Respond to commands
 client.on("interactionCreate", async (interaction) => {
-  if (interaction.isAutocomplete()) {
+  if (interaction.isButton() || interaction.isAutocomplete()) {
     const slashCommand = commands.find(c => c.name === interaction.commandName);
     if (!slashCommand) return;
 
