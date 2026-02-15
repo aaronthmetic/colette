@@ -6,6 +6,8 @@ import { getRostersFromCsv, sheetId, rosterGid } from "./helpers/rosters.js";
 import { getAbbreviationsFromCsv, abbrGid } from "./helpers/abbreviations.js";
 import { getMatchupsFromCsv, upperGid as upperMGid, lowerGid as lowerMGid } from "./helpers/matchups.js";
 import { getStandingsFromCsv, upperGid as upperSGid, lowerGid as lowerSGid } from "./helpers/standings.js";
+import { openMatches } from "./commands/match.js";
+import { loadMatches } from "./helpers/matches.js";
 
 const token = process.env.TOKEN;
 
@@ -17,6 +19,13 @@ client.on("clientReady", async () => {
   if (!client.user || !client.application) {
     console.log("error logging in")
     return;
+  }
+
+  try {
+    await loadMatches(openMatches);
+    console.log(`Loaded ${openMatches.length} saved matches`);
+  } catch (err) {
+    console.error("Failed to load matches:", err);
   }
 
   // register commands

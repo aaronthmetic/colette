@@ -1,4 +1,5 @@
 import { ApplicationCommandType, ApplicationCommandOptionType, userMention, MessageFlags, EmbedBuilder, Colors, PermissionsBitField, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
+import { saveMatches, loadMatches } from '../helpers/matches.js';
 
 export const openMatches = [];
 
@@ -83,6 +84,8 @@ async function startMatch(interaction) {
     blindPicks: [],
     phase: "roster"
   });
+
+  await saveMatches(openMatches);
 
   await interaction.reply({
     embeds: [
@@ -192,6 +195,8 @@ async function submitRoster(interaction) {
 
   match.pendingRosters[interaction.user.id] = { roster, teamName };
 
+  await saveMatches(openMatches);
+
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`confirm_roster_${interaction.user.id}`)
@@ -228,6 +233,8 @@ async function submitRoster(interaction) {
     if (!stillPending) return;
 
     delete match.pendingRosters[interaction.user.id];
+
+    await saveMatches(openMatches);
 
     const disabledRow = new ActionRowBuilder().addComponents(
       row.components.map(btn => ButtonBuilder.from(btn).setDisabled(true))
@@ -287,6 +294,8 @@ async function banPlayer(interaction) {
       by: interaction.user.id,
       player: null
     });
+
+    await saveMatches(openMatches);
 
     await interaction.reply({
       flags: MessageFlags.Ephemeral,
@@ -354,6 +363,8 @@ async function banPlayer(interaction) {
       player: banned
     });
 
+    await saveMatches(openMatches);
+
     await interaction.reply({
       flags: MessageFlags.Ephemeral,
       embeds: [
@@ -389,6 +400,7 @@ async function banPlayer(interaction) {
 
     if (round === 2) {
       match.phase = "blindpick";
+      await saveMatches(openMatches);
       await interaction.channel.send({
         embeds: [
           createEmbed({
@@ -400,6 +412,7 @@ async function banPlayer(interaction) {
       });
     } else {
       match.bans.round++;
+      await saveMatches(openMatches);
       await interaction.channel.send({
         embeds: [
           createEmbed({
@@ -487,9 +500,11 @@ async function blindPick(interaction) {
   if (!entry) {
     entry = { id: interaction.user.id };
     match.blindPicks.push(entry);
+    await saveMatches(openMatches);
   }
 
   entry.response = pick;
+  await saveMatches(openMatches);
 
   await interaction.reply({
       flags: MessageFlags.Ephemeral,
@@ -529,6 +544,7 @@ async function blindPick(interaction) {
     });
 
     openMatches.splice(openMatches.indexOf(match), 1);
+    await saveMatches(openMatches);
   }
 }
 
@@ -619,6 +635,7 @@ async function run(client, interaction) {
       match.rosters[userId] = pending.roster;
       match.teamNames[userId] = pending.teamName;
       delete match.pendingRosters[userId];
+      await saveMatches(openMatches);
 
       await interaction.editReply({
         embeds: [
@@ -641,6 +658,7 @@ async function run(client, interaction) {
 
       if (Object.keys(match.rosters).length === 2) {
         match.phase = "ban";
+        await saveMatches(openMatches);
 
         const [c1, c2] = match.captains;
 
@@ -669,6 +687,7 @@ async function run(client, interaction) {
 
     if (action === "cancel") {
       delete match.pendingRosters[userId];
+      await saveMatches(openMatches);
 
       await interaction.editReply({
         embeds: [
