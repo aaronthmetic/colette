@@ -64,8 +64,11 @@ async function startMatch(interaction) {
   for (let i = openMatches.length - 1; i >= 0; i--) {
     const match = openMatches[i];
     if (
-      match.captains.includes(user1.id) ||
-      match.captains.includes(user2.id)
+      (
+        match.captains.includes(user1.id) ||
+        match.captains.includes(user2.id)
+      ) &&
+      match.channel === interaction.channelId
     ) {
       openMatches.splice(i, 1);
     }
@@ -140,6 +143,18 @@ async function submitRoster(interaction) {
     });
   }
 
+  if (match.pendingRosters[interaction.user.id]) {
+    return interaction.reply({
+      flags: MessageFlags.Ephemeral,
+      embeds: [
+        createEmbed({
+          description: "You already have a pending roster. Confirm or cancel it before submitting again.",
+          color: Colors.Grey
+        })
+      ]
+    });
+  }
+
   const teamName = interaction.options.getString("team", true);
 
   const roster = [
@@ -176,9 +191,10 @@ async function submitRoster(interaction) {
 
   const opponentId = getOpponentId(match, interaction.user.id);
   const opponentRoster = match.rosters[opponentId] ?? [];
+  const opponentPendingRoster = match.pendingRosters[opponentId]?.roster ?? [];
 
   const overlappingPlayers = roster.filter(p =>
-    opponentRoster.includes(p)
+    opponentRoster.includes(p) || opponentPendingRoster.includes(p)
   );
 
   if (overlappingPlayers.length > 0) {

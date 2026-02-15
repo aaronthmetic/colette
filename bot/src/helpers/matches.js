@@ -13,8 +13,10 @@ export async function loadMatches(openMatches) {
   await fs.mkdir(DATA_DIR, { recursive: true });
 
   try {
-  const data = await fs.readFile(MATCHES_PATH, "utf8");
-  const parsed = JSON.parse(data);
+    const data = await fs.readFile(MATCHES_PATH, "utf8");
+    const parsed = JSON.parse(data);
+    openMatches.length = 0;
+    openMatches.push(...parsed);
   }
   catch (err) {
     if (err.code === "ENOENT") {
