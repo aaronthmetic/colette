@@ -4,11 +4,13 @@ import { pickems } from "./pickems.js";
 import { standings } from "./standings.js";
 import { matchups } from "./matchups.js";
 import { rosters } from "./rosters.js";
+import { stream } from "./stream.js";
 export const commands = [
   ping,
   match,
   pickems,
   standings,
   matchups,
-  rosters
+  rosters,
+  stream
 ]
