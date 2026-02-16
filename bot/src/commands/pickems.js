@@ -1,5 +1,5 @@
 import { ApplicationCommandType, ApplicationCommandOptionType, MessageFlags, EmbedBuilder, Colors } from "discord.js";
-import { readStrings, writeStrings, readLeaderboard, generateLeaderboard, writeResults } from '../helpers/pickems.js';
+import { readStrings, writeStrings, readLeaderboard, generateLeaderboard, writeResults, convert } from '../helpers/pickems.js';
 
 const pickemsCutoff = 1771714800;
 const organizerRole = "856957705688055868";
@@ -73,10 +73,23 @@ async function run(_client, interaction) {
     const pickemsData = await readStrings();
     const entry = pickemsData[interaction.user.id];
 
+    if (!entry) {
+      return interaction.editReply({
+        content: "You don't have a pickems entry saved yet."
+      });
+    }
+
+    const { pickems } = convert(entry);
+
+    const lines = Object.entries(pickems).map(([matchKey, matchData]) => {
+      const { team, teamAScore, teamBScore } = matchData;
+      const winner = team;
+      const scoreLine = `${Math.max(teamAScore,teamBScore)}-${Math.min(teamAScore,teamBScore)}`;
+      return `Match ${matchKey.toUpperCase()}: ${winner} (${scoreLine})`;
+    });
+
     await interaction.editReply({
-      content: entry
-        ? `Your submitted pickems:\n\`\`\`${entry}\`\`\``
-        : "You don't have a pickems entry saved yet."
+      content: `\`\`\`${lines.join("\n")}\`\`\``
     });
   }
 
