@@ -4,6 +4,22 @@ import path from 'path';
 const DATA_DIR = path.resolve('../data/pickems');
 const PICKEMS_PATH = path.join(DATA_DIR, 'strings.json');
 const LEADERBOARD_PATH = path.join(DATA_DIR, 'leaderboard.json');
+const RESULTS_PATH = path.join(DATA_DIR, 'results.json')
+
+// THIS IS WHERE YOU SET THE INPUTS
+
+const teams2026 = [
+    'UCLA A',
+    'PURDUE A',
+    'UBC A',
+    'UC BERKELEY A',
+    'UWASH A',
+    'UOFT A',
+    'UWATERLOO A',
+    'UCLA B'
+];
+
+// end of setting inputs
 
 export async function readStrings() {
     try {
@@ -33,6 +49,11 @@ export async function readLeaderboard() {
     }
 }
 
+export async function writeResults(string, playedMatches) {
+    await fs.mkdir(DATA_DIR, { recursive: true });
+    await fs.writeFile(RESULTS_PATH, JSON.stringify({ string, playedMatches }, null, 2), 'utf-8');
+}
+
 function chunkString(str, size) {
     const chunks = [];
     for (let i = 0; i < str.length; i += size) {
@@ -42,13 +63,13 @@ function chunkString(str, size) {
 }
 
 export function convert(str, uid='') {
-    // this should be adjusted for future years
+    // this should be adjusted for future years, although not important (only affects the json)
     const teams = teams2026;
 
-    const teamGuesses = String(parseInt(str.slice(0,6),16)).split('').map(char => teams[Number(char)-1] ?? 'blank');
-    const scoreGuesses = chunkString(str.slice(6), 2).map(score => parseInt(score, 16));
+    const teamGuesses = String(parseInt(str.slice(0,7),16)).split('').map(char => teams[Number(char)-1] ?? 'blank');
+    const scoreGuesses = chunkString(str.slice(7), 2).map(score => parseInt(score, 16));
 
-    const roundValues = [10,20,40];
+    const roundValues = [10,20,40,30];
 
     const pickems = teamGuesses.reduce((acc, team, i) => {
         const key = String.fromCharCode(97 + i);
@@ -57,8 +78,8 @@ export function convert(str, uid='') {
             team,
             teamAScore: scoreGuesses[i * 2],
             teamBScore: scoreGuesses[i * 2 + 1],
-            teamsCorrect: true ? i < 4 : false,
-            pointValue: i < 4 ? roundValues[0] : i < 6 ? roundValues[1] : roundValues[2]
+            teamsCorrect: i < 4,
+            pointValue: i < 4 ? roundValues[0] : i < 6 ? roundValues[1] : i < 7 ? roundValues[2] : roundValues[3]
         };
 
         return acc;
@@ -67,12 +88,18 @@ export function convert(str, uid='') {
     return { pickems, uid };
 }
 
-export function checkPickems(pickems, correct) {
+export async function checkPickems(pickems, correct) {
     let score = 0;
     let pointDiff = 0;
     const correctMatches = []
-    // this should be adjusted for future years
-    const playedArray = playedArray2026;
+    let playedArray;
+
+    try {
+        const data = await fs.readFile(RESULTS_PATH, 'utf8');
+        playedArray = JSON.parse(data).playedMatches;
+    } catch (err) {
+        playedArray = [];
+    }
 
     for (const match of playedArray) {
         const pickedTeam = pickems[match].team;
@@ -94,6 +121,7 @@ export function checkPickems(pickems, correct) {
 
     if (correctMatches.includes('e') && correctMatches.includes('f')) {
         pickems.g.teamsCorrect = true;
+        pickems.h.teamsCorrect = true;
     }
 
     for (const match of playedArray) {
@@ -111,7 +139,16 @@ export function checkPickems(pickems, correct) {
 }
 
 export async function generateLeaderboard() {
-    const correctPickems = correctPickems2026;
+    let pickemsString;
+
+    try {
+        const data = await fs.readFile(RESULTS_PATH, 'utf8');
+        pickemsString = JSON.parse(data).string;
+    } catch (err) {
+        pickemsString = '5f5e0ff00000000000000000000000000000000';
+    }
+
+    const correctPickems = convert(pickemsString);
 
     const strings = await readStrings();
 
@@ -120,7 +157,7 @@ export async function generateLeaderboard() {
     for (const [uid, str] of Object.entries(strings)) {
         try {
             const inputPickems = convert(str, uid);
-            const result = checkPickems(inputPickems.pickems, correctPickems.pickems);
+            const result = await checkPickems(inputPickems.pickems, correctPickems.pickems);
 
             leaderboard.push({
                 uid,
@@ -142,20 +179,3 @@ export async function generateLeaderboard() {
 
     return leaderboard;
 }
-
-// THIS IS WHERE YOU SET THE INPUTS
-
-const teams2026 = [
-    'ucla a',
-    'ucla b',
-    'ucla c',
-    'ucla d',
-    'ucla e',
-    'ucla f',
-    'ucla g',
-    'ucla h'
-];
-
-const playedArray2026 = ['a','b','c','d','e','f','g'];
-
-const correctPickems2026 = convert('173db1230d0c201d0d1613230517112300');

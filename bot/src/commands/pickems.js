@@ -1,5 +1,5 @@
 import { ApplicationCommandType, ApplicationCommandOptionType, MessageFlags, EmbedBuilder, Colors } from "discord.js";
-import {readStrings, writeStrings, readLeaderboard, generateLeaderboard} from '../helpers/pickems.js';
+import { readStrings, writeStrings, readLeaderboard, generateLeaderboard, writeResults } from '../helpers/pickems.js';
 
 const pickemsCutoff = 1771714800;
 const organizerRole = "856957705688055868";
@@ -21,12 +21,14 @@ async function run(_client, interaction) {
   const subcommand = interaction.options.getSubcommand();
 
   // REMOVE THIS LATER AFTER TESTING PHASE DONE
+  /*
   if (!interaction.inGuild() || !interaction.member.roles.cache.has(organizerRole)) {
     return interaction.reply({
       content: "No permission to use this command.",
       flags: MessageFlags.Ephemeral
     });
   }
+  */
 
   const isPublic = (subcommand === "leaderboard");
 
@@ -46,9 +48,9 @@ async function run(_client, interaction) {
     const inputString = interaction.options.getString("string", true).trim();
     const userId = interaction.user.id;
 
-    if (inputString.length !== 34 || !/^[0-9a-fA-F]+$/.test(inputString)) {
+    if (inputString.length !== 39 || !/^[0-9a-fA-F]+$/.test(inputString)) {
         return interaction.editReply({
-            content: "Invalid pickems string. Please make sure you copied the string directly from the cell and that it's a 34-digit hex value."
+            content: "Invalid pickems string. Please make sure you copied the string directly from the cell and that it's a 39-digit hex value."
         });
     }
 
@@ -121,6 +123,39 @@ async function run(_client, interaction) {
       embeds: [embed]
     });
   }
+
+  if (subcommand === "setresults") {
+    // organizer check
+    if (!interaction.inGuild() || !interaction.member.roles.cache.has(organizerRole)) {
+      return interaction.editReply({
+        content: "No permission to use this command.",
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    const inputString = interaction.options.getString("string", true).trim();
+    const playedMatchesRaw = interaction.options.getString("playedmatches")?.trim().toLowerCase();
+
+    if (inputString.length !== 39 || !/^[0-9a-fA-F]+$/.test(inputString)) {
+      return interaction.editReply({
+        content: "Invalid results string. Must be a 39-digit hex value."
+      });
+    }
+
+    if (playedMatchesRaw && !/^[a-h]+$/.test(playedMatchesRaw)) {
+      return interaction.editReply({
+        content: "Played matches must only contain letters a-h (e.g. abcd)."
+      });
+    }
+
+    const playedMatches = playedMatchesRaw ? [...new Set(playedMatchesRaw.split(""))] : [];
+
+    await writeResults(inputString, playedMatches);
+
+    await interaction.editReply({
+      content: `Results updated.\nPlayed matches: ${playedMatches.join(",")}\nPickems string: ${inputString}`
+    });
+  }
 }
 
 export const pickems = {
@@ -152,6 +187,25 @@ export const pickems = {
       type: ApplicationCommandOptionType.Subcommand,
       name: "leaderboard",
       description: "view the top 10 pickems leaderboard"
+    },
+    {
+      type: ApplicationCommandOptionType.Subcommand,
+      name: "setresults",
+      description: "organizer use only: set the correct pickems string",
+      options: [
+        {
+          name: "string",
+          description: "the pickems string of the current outcomes",
+          type: ApplicationCommandOptionType.String,
+          required: true
+        },
+        {
+          name: "playedmatches",
+          description: "the letters of the matches that have been played e.g. abcd after the first round completed",
+          type: ApplicationCommandOptionType.String,
+          required: false
+        }
+      ]
     }
   ]
 };
