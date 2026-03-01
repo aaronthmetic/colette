@@ -1,4 +1,4 @@
-import { ApplicationCommandType, ApplicationCommandOptionType, MessageFlags, EmbedBuilder, Colors } from "discord.js";
+import { ApplicationCommandType, ApplicationCommandOptionType, MessageFlags, EmbedBuilder, Colors, ActionRowBuilder, ButtonBuilder, ButtonStyle } from "discord.js";
 import { readStrings, writeStrings, readLeaderboard, generateLeaderboard, writeResults, convert } from '../helpers/pickems.js';
 
 const pickemsCutoff = 1771714800;
@@ -169,6 +169,38 @@ async function run(_client, interaction) {
       content: `Results updated.\nPlayed matches: ${playedMatches.join(",")}\nPickems string: ${inputString}`
     });
   }
+
+  if (subcommand === "checkuserpickems") {
+    // organizer check
+    if (!interaction.inGuild() || !interaction.member.roles.cache.has(organizerRole)) {
+      return interaction.editReply({
+        content: "No permission to use this command.",
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
+    const user = interaction.options.getUser("user", true);
+
+    const leaderboard = await readLeaderboard();
+
+    if (!Array.isArray(leaderboard) || leaderboard.length === 0) {
+      return interaction.editReply({
+        content: "No leaderboard data yet."
+      });
+    }
+
+    const userPickems = leaderboard.find(entry => entry.uid === user.id);
+
+    if (!userPickems) {
+      return interaction.editReply({
+        content: "That user has no pickems data."
+      });
+    }
+
+    await interaction.editReply({
+      content: `\`\`\`${JSON.stringify(userPickems, null, 2)}\`\`\``
+    });
+  }
 }
 
 export const pickems = {
@@ -217,6 +249,19 @@ export const pickems = {
           description: "the letters of the matches that have been played e.g. abcd after the first round completed",
           type: ApplicationCommandOptionType.String,
           required: false
+        }
+      ]
+    },
+    {
+      type: ApplicationCommandOptionType.Subcommand,
+      name: "checkuserpickems",
+      description: "organizer use only: view a user's pickems",
+      options: [
+        {
+          name: "user",
+          description: "the user to check",
+          type: ApplicationCommandOptionType.User,
+          required: true
         }
       ]
     }
